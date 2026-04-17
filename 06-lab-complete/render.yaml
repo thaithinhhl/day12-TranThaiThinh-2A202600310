@@ -1,23 +1,29 @@
 services:
   - type: web
-    name: ai-agent-production
+    name: production-ai-agent
     runtime: docker
     region: singapore
     plan: starter
     healthCheckPath: /health
     autoDeploy: true
     envVars:
-      - key: ENVIRONMENT
-        value: production
-      - key: APP_VERSION
-        value: "1.0.0"
-      - key: OPENAI_API_KEY
+      - key: PORT
+        value: "8000"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: REDIS_URL
         sync: false
       - key: AGENT_API_KEY
         generateValue: true
-      - key: JWT_SECRET
-        generateValue: true
-      - key: DAILY_BUDGET_USD
-        value: "5.0"
       - key: RATE_LIMIT_PER_MINUTE
+        value: "10"
+      - key: MONTHLY_BUDGET_USD
+        value: "10"
+      - key: CONVERSATION_MAX_TURNS
         value: "20"
+      - key: ESTIMATED_COST_PER_REQUEST_USD
+        value: "0.01"
+      - key: LLM_MODEL
+        value: mock-llm-v1
+      - key: ENVIRONMENT
+        value: production

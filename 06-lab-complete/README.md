@@ -1,100 +1,107 @@
-# Lab 12 — Complete Production Agent
+# Lab 12 - Production Agent Complete
 
-Kết hợp TẤT CẢ những gì đã học trong 1 project hoàn chỉnh.
+Project nay dap ung checklist final project:
+- REST API tra loi cau hoi (`POST /ask`)
+- Luu conversation history trong Redis (stateless app)
+- API key auth (`X-API-Key`)
+- Rate limit 10 req/phut/user
+- Cost guard 10 USD/thang/user
+- Health (`GET /health`) va Readiness (`GET /ready`)
+- Graceful shutdown (SIGTERM)
+- Structured JSON logging
+- Docker multi-stage + Nginx load balancing + Redis
+- San sang deploy Railway hoac Render
 
-## Checklist Deliverable
+## Cau truc
 
-- [x] Dockerfile (multi-stage, < 500 MB)
-- [x] docker-compose.yml (agent + redis)
-- [x] .dockerignore
-- [x] Health check endpoint (`GET /health`)
-- [x] Readiness endpoint (`GET /ready`)
-- [x] API Key authentication
-- [x] Rate limiting
-- [x] Cost guard
-- [x] Config từ environment variables
-- [x] Structured logging
-- [x] Graceful shutdown
-- [x] Public URL ready (Railway / Render config)
-
----
-
-## Cấu Trúc
-
-```
+```text
 06-lab-complete/
 ├── app/
-│   ├── main.py         # Entry point — kết hợp tất cả
-│   ├── config.py       # 12-factor config
-│   ├── auth.py         # API Key + JWT
-│   ├── rate_limiter.py # Rate limiting
-│   └── cost_guard.py   # Budget protection
-├── Dockerfile          # Multi-stage, production-ready
-├── docker-compose.yml  # Full stack
-├── railway.toml        # Deploy Railway
-├── render.yaml         # Deploy Render
-├── .env.example        # Template
-├── .dockerignore
-└── requirements.txt
+│   ├── __init__.py
+│   ├── main.py
+│   ├── config.py
+│   ├── auth.py
+│   ├── rate_limiter.py
+│   └── cost_guard.py
+├── Dockerfile
+├── docker-compose.yml
+├── nginx.conf
+├── .env.example
+├── railway.toml
+├── render.yaml
+└── check_production_ready.py
 ```
 
----
-
-## Chạy Local
+## Chay local voi Docker
 
 ```bash
-# 1. Setup
+cd 06-lab-complete
 cp .env.example .env
-
-# 2. Chạy với Docker Compose
-docker compose up
-
-# 3. Test
-curl http://localhost/health
-
-# 4. Lấy API key từ .env, test endpoint
-API_KEY=$(grep AGENT_API_KEY .env | cut -d= -f2)
-curl -H "X-API-Key: $API_KEY" \
-     -X POST http://localhost/ask \
-     -H "Content-Type: application/json" \
-     -d '{"question": "What is deployment?"}'
+docker compose up --build --scale agent=3
 ```
 
----
-
-## Deploy Railway (< 5 phút)
+Test nhanh:
 
 ```bash
-# Cài Railway CLI
-npm i -g @railway/cli
-
-# Login và deploy
-railway login
-railway init
-railway variables set OPENAI_API_KEY=sk-...
-railway variables set AGENT_API_KEY=your-secret-key
-railway up
-
-# Nhận public URL!
-railway domain
+curl http://localhost:18080/health
+curl http://localhost:18080/ready
+curl -X POST http://localhost:18080/ask \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: secret" \
+  -H "X-User-Id: user1" \
+  -d '{"question":"Hello production agent"}'
 ```
 
----
+## Kiem thu rate limit va budget
 
-## Deploy Render
+Rate limit (lan thu 11 trong 1 phut se tra 429):
 
-1. Push repo lên GitHub
-2. Render Dashboard → New → Blueprint
-3. Connect repo → Render đọc `render.yaml`
-4. Set secrets: `OPENAI_API_KEY`, `AGENT_API_KEY`
-5. Deploy → Nhận URL!
+```bash
+for i in $(seq 1 11); do
+  curl -s -o /dev/null -w "%{http_code}\n" \
+    -X POST http://localhost:18080/ask \
+    -H "Content-Type: application/json" \
+    -H "X-API-Key: secret" \
+    -H "X-User-Id: user-rate" \
+    -d '{"question":"test"}'
+done
+```
 
----
+Cost guard (doi trong `.env`: `MONTHLY_BUDGET_USD=0.02`, moi request ton 0.01):
 
-## Kiểm Tra Production Readiness
+```bash
+docker compose down
+docker compose up --build --scale agent=3
+```
+
+Sau 2 request se nhan `402`.
+
+## Kiem tra checklist tu dong
 
 ```bash
 python check_production_ready.py
 ```
 
-Script này kiểm tra tất cả items trong checklist và báo cáo những gì còn thiếu.
+## Deploy Railway
+
+```bash
+railway login
+railway init
+railway variables set REDIS_URL=redis://<your-redis-url>
+railway variables set AGENT_API_KEY=<your-secret-key>
+railway variables set RATE_LIMIT_PER_MINUTE=10
+railway variables set MONTHLY_BUDGET_USD=10
+railway up
+```
+
+## Deploy Render
+
+1. Push repo len GitHub
+2. Tao Redis service tren Render de lay `REDIS_URL`
+3. Render -> New -> Blueprint -> chon repo
+4. Set env vars: `REDIS_URL`, `AGENT_API_KEY`
+5. Deploy va test public URL:
+
+```bash
+curl https://<your-render-url>/health
+```
